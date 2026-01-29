@@ -48,11 +48,17 @@ class KernelBuilder:
     def debug_info(self):
         return DebugInfo(scratch_map=self.scratch_debug)
 
-    def build(self, slots: list[tuple[Engine, tuple]], vliw: bool = False):
+    def build(self, slots: list[tuple[Engine, tuple] | dict[Engine, list[tuple]]], vliw: bool = False):
         # Simple slot packing that just uses one slot per instruction bundle
+        # Also handles pre-built instruction bundles (dicts) for parallel operations
         instrs = []
-        for engine, slot in slots:
-            instrs.append({engine: [slot]})
+        for item in slots:
+            if isinstance(item, dict):
+                # Already a pre-built instruction bundle
+                instrs.append(item)
+            else:
+                engine, slot = item
+                instrs.append({engine: [slot]})
         return instrs
 
     def add(self, engine, slot):
@@ -78,8 +84,11 @@ class KernelBuilder:
         slots = []
 
         for hi, (op1, val1, op2, op3, val3) in enumerate(HASH_STAGES):
-            slots.append(("alu", (op1, tmp1, val_hash_addr, self.scratch_const(val1))))
-            slots.append(("alu", (op3, tmp2, val_hash_addr, self.scratch_const(val3))))
+            # Execute the two independent ALU operations in parallel (one cycle)
+            slots.append({"alu": [
+                (op1, tmp1, val_hash_addr, self.scratch_const(val1)),
+                (op3, tmp2, val_hash_addr, self.scratch_const(val3))
+            ]})
             slots.append(("alu", (op2, val_hash_addr, tmp1, tmp2)))
             slots.append(("debug", ("compare", val_hash_addr, (round, i, "hash_stage", hi))))
 
