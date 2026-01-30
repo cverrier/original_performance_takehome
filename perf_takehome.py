@@ -209,8 +209,11 @@ class KernelBuilder:
                 body.append(("debug", ("vcompare", tmp_val, [(round, i+j, "val") for j in range(VLEN)])))
                 # Load node values (gather: node_val[j] = mem[forest_values_p + idx[j]])
                 body.append(("valu", ("+", tmp_addr_vec, forest_values_p_vec, tmp_idx)))
-                for j in range(VLEN):
-                    body.append(("load", ("load_offset", tmp_node_val, tmp_addr_vec, j)))
+                for j in range(0, VLEN, 2):
+                    body.append({"load": [
+                        ("load_offset", tmp_node_val, tmp_addr_vec, j),
+                        ("load_offset", tmp_node_val, tmp_addr_vec, j+1)
+                    ]})
                 body.append(("debug", ("vcompare", tmp_node_val, [(round, i+j, "node_val") for j in range(VLEN)])))
                 # Compute XOR and hash values
                 body.append(("valu", ("^", tmp_val, tmp_val, tmp_node_val)))
