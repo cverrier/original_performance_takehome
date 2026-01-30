@@ -108,7 +108,7 @@ class KernelBuilder:
         """
         tmp1 = self.alloc_scratch("tmp1", length=VLEN)
         tmp2 = self.alloc_scratch("tmp2", length=VLEN)
-        tmp3 = self.alloc_scratch("tmp3")
+        tmp3 = self.alloc_scratch("tmp3", length=VLEN)
         # Scratch space addresses
         init_vars = [
             "rounds",
@@ -124,6 +124,9 @@ class KernelBuilder:
         for i, v in enumerate(init_vars):
             self.add("load", ("const", tmp1, i))
             self.add("load", ("load", self.scratch[v], tmp1))
+
+        n_nodes_vec = self.alloc_scratch("n_nodes_vec", length=VLEN)
+        self.add("valu", ("vbroadcast", n_nodes_vec, self.scratch["n_nodes"]))
 
         # Allocate and initialize an offset vector so we can process VLEN
         # workers in parallel.
@@ -189,10 +192,9 @@ class KernelBuilder:
                 body.append(("valu", ("+", tmp_idx, tmp_idx, tmp3)))
                 body.append(("debug", ("vcompare", tmp_idx, (round, i, "next_idx"))))
                 # Compute idx = 0 if idx >= n_nodes else idx
-                body.append(("valu", ("<", tmp1, tmp_idx, self.scratch["n_nodes"])))
-                # TODO: Continue here
-                body.append(("flow", ("select", tmp_idx, tmp1, tmp_idx, zero_const)))
-                body.append(("debug", ("compare", tmp_idx, (round, i, "wrapped_idx"))))
+                body.append(("valu", ("<", tmp1, tmp_idx, n_nodes_vec)))
+                body.append(("flow", ("vselect", tmp_idx, tmp1, tmp_idx, zero_const_vec)))
+                body.append(("debug", ("vcompare", tmp_idx, (round, i, "wrapped_idx"))))
 
                 ### OLD CODE ###
                 # mem[inp_indices_p + i] = idx
