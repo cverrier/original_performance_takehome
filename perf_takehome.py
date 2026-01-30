@@ -159,7 +159,7 @@ class KernelBuilder:
         tmp_idx = self.alloc_scratch("tmp_idx", length=VLEN)
         tmp_val = self.alloc_scratch("tmp_val", length=VLEN)
         tmp_node_val = self.alloc_scratch("tmp_node_val", length=VLEN)
-        tmp_addr = self.alloc_scratch("tmp_addr", length=VLEN)
+        tmp_addr = self.alloc_scratch("tmp_addr", length=1)
 
         for round in range(rounds):
             for i in range(0, batch_size, VLEN):
