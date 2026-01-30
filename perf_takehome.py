@@ -187,6 +187,9 @@ class KernelBuilder:
         tmp_addr = self.alloc_scratch("tmp_addr", length=1)
         tmp_addr_vec = self.alloc_scratch("tmp_addr_vec", length=VLEN)
 
+        tmp_inp_indices_addr = self.alloc_scratch("tmp_inp_indices_addr", length=1)
+        tmp_inp_values_addr = self.alloc_scratch("tmp_inp_values_addr", length=1)
+
         # Broadcast forest_values_p for gather operation
         forest_values_p_vec = self.alloc_scratch("forest_values_p_vec", length=VLEN)
         self.add("valu", ("vbroadcast", forest_values_p_vec, self.scratch["forest_values_p"]))
@@ -194,14 +197,16 @@ class KernelBuilder:
         for round in range(rounds):
             for i in range(0, batch_size, VLEN):
                 i_const = self.scratch_const(i)
-                # Load node indices
-                # TODO: Combine loading tree indices and input values together
-                body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
-                body.append(("load", ("vload", tmp_idx, tmp_addr)))
+                # Load node indices and input values in parallel
+                body.append({"alu": [
+                    ("+", tmp_inp_indices_addr, self.scratch["inp_indices_p"], i_const),
+                    ("+", tmp_inp_values_addr, self.scratch["inp_values_p"], i_const)
+                ]})
+                body.append({"load": [
+                    ("vload", tmp_idx, tmp_inp_indices_addr),
+                    ("vload", tmp_val, tmp_inp_values_addr)
+                ]})
                 body.append(("debug", ("vcompare", tmp_idx, [(round, i+j, "idx") for j in range(VLEN)])))
-                # Load input values
-                body.append(("alu", ("+", tmp_addr, self.scratch["inp_values_p"], i_const)))
-                body.append(("load", ("vload", tmp_val, tmp_addr)))
                 body.append(("debug", ("vcompare", tmp_val, [(round, i+j, "val") for j in range(VLEN)])))
                 # Load node values (gather: node_val[j] = mem[forest_values_p + idx[j]])
                 body.append(("valu", ("+", tmp_addr_vec, forest_values_p_vec, tmp_idx)))
