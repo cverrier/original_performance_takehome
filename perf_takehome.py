@@ -188,12 +188,13 @@ class KernelBuilder:
                 body.append(("valu", ("*", tmp_idx, tmp_idx, two_const_vec)))
                 body.append(("valu", ("+", tmp_idx, tmp_idx, tmp3)))
                 body.append(("debug", ("vcompare", tmp_idx, (round, i, "next_idx"))))
-
-                ### OLD CODE ###
-                # idx = 0 if idx >= n_nodes else idx
-                body.append(("alu", ("<", tmp1, tmp_idx, self.scratch["n_nodes"])))
+                # Compute idx = 0 if idx >= n_nodes else idx
+                body.append(("valu", ("<", tmp1, tmp_idx, self.scratch["n_nodes"])))
+                # TODO: Continue here
                 body.append(("flow", ("select", tmp_idx, tmp1, tmp_idx, zero_const)))
                 body.append(("debug", ("compare", tmp_idx, (round, i, "wrapped_idx"))))
+
+                ### OLD CODE ###
                 # mem[inp_indices_p + i] = idx
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
                 body.append(("store", ("store", tmp_addr, tmp_idx)))
