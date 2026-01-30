@@ -195,14 +195,14 @@ class KernelBuilder:
                 body.append(("valu", ("<", tmp1, tmp_idx, n_nodes_vec)))
                 body.append(("flow", ("vselect", tmp_idx, tmp1, tmp_idx, zero_const_vec)))
                 body.append(("debug", ("vcompare", tmp_idx, (round, i, "wrapped_idx"))))
-
-                ### OLD CODE ###
-                # mem[inp_indices_p + i] = idx
+                # Compute mem[inp_indices_p + i] = idx
+                # TODO: Keep this address since we already compute it at the beginning
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
-                body.append(("store", ("store", tmp_addr, tmp_idx)))
-                # mem[inp_values_p + i] = val
+                body.append(("store", ("vstore", tmp_addr, tmp_idx)))
+                # Compute mem[inp_values_p + i] = val
+                # TODO: Keep this address since we already compute it at the beginning
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_values_p"], i_const)))
-                body.append(("store", ("store", tmp_addr, tmp_val)))
+                body.append(("store", ("vstore", tmp_addr, tmp_val)))
 
         body_instrs = self.build(body)
         self.instrs.extend(body_instrs)
