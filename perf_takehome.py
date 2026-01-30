@@ -80,22 +80,23 @@ class KernelBuilder:
             self.const_map[val] = addr
         return self.const_map[val]
 
-    def init_hash_constants(self):
+    def init_hash_constants(self) -> tuple[list, list]:
         """Pre-load hash constants into scratch addresses for use in build_hash."""
-        self.hash_val1_addrs = []
-        self.hash_val3_addrs = []
+        hash_val1_addrs = []
+        hash_val3_addrs = []
         for _, val1, _, _, val3 in HASH_STAGES:
             val1_addr = self.scratch_const(val1)
             val3_addr = self.scratch_const(val3)
-            self.hash_val1_addrs.append(val1_addr)
-            self.hash_val3_addrs.append(val3_addr)
+            hash_val1_addrs.append(val1_addr)
+            hash_val3_addrs.append(val3_addr)
+        return hash_val1_addrs, hash_val3_addrs
 
-    def build_hash(self, val_hash_addr, tmp1, tmp2, round, i):
+    def build_hash(self, val_hash_addr, hash_val1_addrs, hash_val3_addrs, tmp1, tmp2, round, i):
         slots = []
 
         for hi, (op1, val1, op2, op3, val3) in enumerate(HASH_STAGES):
-            val1_addr = self.hash_val1_addrs[hi]
-            val3_addr = self.hash_val3_addrs[hi]
+            val1_addr = hash_val1_addrs[hi]
+            val3_addr = hash_val3_addrs[hi]
             # TODO: Broadcast val1 and val3 only once at the beginning
             slots.append({"valu": [
                 ("vbroadcast", tmp1, val1_addr),
@@ -161,7 +162,7 @@ class KernelBuilder:
         self.add("valu", ("vbroadcast", two_const_vec, two_const))
 
         # Pre-load hash constants
-        self.init_hash_constants()
+        hash_val1_addrs, hash_val3_addrs = self.init_hash_constants()
 
         # Pause instructions are matched up with yield statements in the reference
         # kernel to let you debug at intermediate steps. The testing harness in this
@@ -203,7 +204,7 @@ class KernelBuilder:
                 body.append(("debug", ("vcompare", tmp_node_val, [(round, i+j, "node_val") for j in range(VLEN)])))
                 # Compute XOR and hash values
                 body.append(("valu", ("^", tmp_val, tmp_val, tmp_node_val)))
-                body.extend(self.build_hash(tmp_val, tmp1, tmp2, round, i))
+                body.extend(self.build_hash(tmp_val, hash_val1_addrs, hash_val3_addrs, tmp1, tmp2, round, i))
                 body.append(("debug", ("vcompare", tmp_val, [(round, i+j, "hashed_val") for j in range(VLEN)])))
                 # Compute idx = 2*idx + (1 if val % 2 == 0 else 2)
                 body.append(("valu", ("%", tmp1, tmp_val, two_const_vec)))
