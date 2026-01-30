@@ -156,19 +156,17 @@ class KernelBuilder:
 
         # Pre-load hash constants and broadcast them
         hash_val1_addrs, hash_val3_addrs = self.init_hash_constants()
-        val1_vecs = []
-        val3_vecs = []
-        for hi in range(len(HASH_STAGES)):
-            val1_hi_vec = self.alloc_scratch(f"val1_{hi}_vec", length=VLEN)
-            val3_hi_vec = self.alloc_scratch(f"val3_{hi}_vec", length=VLEN)
-            val1_hi_addr = hash_val1_addrs[hi]
-            val3_hi_addr = hash_val3_addrs[hi]
-            self.instrs.append({"valu": [
-                ("vbroadcast", val1_hi_vec, val1_hi_addr),
-                ("vbroadcast", val3_hi_vec, val3_hi_addr)
-            ]})
-            val1_vecs.append(val1_hi_vec)
-            val3_vecs.append(val3_hi_vec)
+        assert (n_hash_stages:=len(HASH_STAGES)) <= SLOT_LIMITS["valu"]
+        val1_vecs = [self.alloc_scratch(f"val1_{hi}_vec", length=VLEN) for hi in range(n_hash_stages)]
+        val3_vecs = [self.alloc_scratch(f"val3_{hi}_vec", length=VLEN) for hi in range(n_hash_stages)]
+        self.instrs.append({"valu": [
+            ("vbroadcast", val1_hi_vec, val1_hi_addr)
+            for val1_hi_vec, val1_hi_addr in zip(val1_vecs, hash_val1_addrs)
+        ]})
+        self.instrs.append({"valu": [
+            ("vbroadcast", val3_hi_vec, val3_hi_addr)
+            for val3_hi_vec, val3_hi_addr in zip(val3_vecs, hash_val3_addrs)
+        ]})
 
         # Pause instructions are matched up with yield statements in the reference
         # kernel to let you debug at intermediate steps. The testing harness in this
