@@ -84,7 +84,7 @@ class KernelBuilder:
         """Pre-load hash constants into scratch addresses for use in build_hash."""
         self.hash_val1_addrs = []
         self.hash_val3_addrs = []
-        for hi, (op1, val1, op2, op3, val3) in enumerate(HASH_STAGES):
+        for _, val1, _, _, val3 in HASH_STAGES:
             val1_addr = self.scratch_const(val1)
             val3_addr = self.scratch_const(val3)
             self.hash_val1_addrs.append(val1_addr)
