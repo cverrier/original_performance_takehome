@@ -80,14 +80,26 @@ class KernelBuilder:
             self.const_map[val] = addr
         return self.const_map[val]
 
+    def init_hash_constants(self):
+        """Pre-load hash constants into scratch addresses for use in build_hash."""
+        self.hash_val1_addrs = []
+        self.hash_val3_addrs = []
+        for hi, (op1, val1, op2, op3, val3) in enumerate(HASH_STAGES):
+            val1_addr = self.scratch_const(val1)
+            val3_addr = self.scratch_const(val3)
+            self.hash_val1_addrs.append(val1_addr)
+            self.hash_val3_addrs.append(val3_addr)
+
     def build_hash(self, val_hash_addr, tmp1, tmp2, round, i):
         slots = []
 
         for hi, (op1, val1, op2, op3, val3) in enumerate(HASH_STAGES):
+            val1_addr = self.hash_val1_addrs[hi]
+            val3_addr = self.hash_val3_addrs[hi]
             # TODO: Broadcast val1 and val3 only once at the beginning
             slots.append({"valu": [
-                ("vbroadcast", tmp1, val1),
-                ("vbroadcast", tmp2, val3)
+                ("vbroadcast", tmp1, val1_addr),
+                ("vbroadcast", tmp2, val3_addr)
             ]})
             # Execute the two independent ALU operations in parallel (one cycle)
             slots.append({"valu": [
@@ -95,7 +107,7 @@ class KernelBuilder:
                 (op3, tmp2, val_hash_addr, tmp2)
             ]})
             slots.append(("valu", (op2, val_hash_addr, tmp1, tmp2)))
-            slots.append(("debug", ("vcompare", val_hash_addr, (round, i, "hash_stage", hi))))
+            slots.append(("debug", ("vcompare", val_hash_addr, [(round, i+j, "hash_stage", hi) for j in range(VLEN)])))
 
         return slots
 
@@ -148,6 +160,9 @@ class KernelBuilder:
         two_const_vec = self.alloc_scratch("two_const_vec", length=VLEN)
         self.add("valu", ("vbroadcast", two_const_vec, two_const))
 
+        # Pre-load hash constants
+        self.init_hash_constants()
+
         # Pause instructions are matched up with yield statements in the reference
         # kernel to let you debug at intermediate steps. The testing harness in this
         # file requires these match up to the reference kernel's yields, but the
@@ -158,11 +173,16 @@ class KernelBuilder:
 
         body = []  # array of slots
 
-        # Scalar scratch registers
+        # Scratch registers for loop body
         tmp_idx = self.alloc_scratch("tmp_idx", length=VLEN)
         tmp_val = self.alloc_scratch("tmp_val", length=VLEN)
         tmp_node_val = self.alloc_scratch("tmp_node_val", length=VLEN)
         tmp_addr = self.alloc_scratch("tmp_addr", length=1)
+        tmp_addr_vec = self.alloc_scratch("tmp_addr_vec", length=VLEN)
+
+        # Broadcast forest_values_p for gather operation
+        forest_values_p_vec = self.alloc_scratch("forest_values_p_vec", length=VLEN)
+        self.add("valu", ("vbroadcast", forest_values_p_vec, self.scratch["forest_values_p"]))
 
         for round in range(rounds):
             for i in range(0, batch_size, VLEN):
@@ -171,30 +191,31 @@ class KernelBuilder:
                 # TODO: Combine loading tree indices and input values together
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
                 body.append(("load", ("vload", tmp_idx, tmp_addr)))
-                body.append(("debug", ("vcompare", tmp_idx, (round, i, "idx"))))
+                body.append(("debug", ("vcompare", tmp_idx, [(round, i+j, "idx") for j in range(VLEN)])))
                 # Load input values
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_values_p"], i_const)))
                 body.append(("load", ("vload", tmp_val, tmp_addr)))
-                body.append(("debug", ("vcompare", tmp_val, (round, i, "val"))))
-                # Load node values
-                body.append(("alu", ("+", tmp_addr, self.scratch["forest_values_p"], i_const)))
-                body.append(("load", ("vload", tmp_node_val, tmp_addr)))
-                body.append(("debug", ("vcompare", tmp_node_val, (round, i, "node_val"))))
+                body.append(("debug", ("vcompare", tmp_val, [(round, i+j, "val") for j in range(VLEN)])))
+                # Load node values (gather: node_val[j] = mem[forest_values_p + idx[j]])
+                body.append(("valu", ("+", tmp_addr_vec, forest_values_p_vec, tmp_idx)))
+                for j in range(VLEN):
+                    body.append(("load", ("load_offset", tmp_node_val, tmp_addr_vec, j)))
+                body.append(("debug", ("vcompare", tmp_node_val, [(round, i+j, "node_val") for j in range(VLEN)])))
                 # Compute XOR and hash values
                 body.append(("valu", ("^", tmp_val, tmp_val, tmp_node_val)))
                 body.extend(self.build_hash(tmp_val, tmp1, tmp2, round, i))
-                body.append(("debug", ("vcompare", tmp_val, (round, i, "hashed_val"))))
+                body.append(("debug", ("vcompare", tmp_val, [(round, i+j, "hashed_val") for j in range(VLEN)])))
                 # Compute idx = 2*idx + (1 if val % 2 == 0 else 2)
                 body.append(("valu", ("%", tmp1, tmp_val, two_const_vec)))
                 body.append(("valu", ("==", tmp1, tmp1, zero_const_vec)))
                 body.append(("flow", ("vselect", tmp3, tmp1, one_const_vec, two_const_vec)))
                 body.append(("valu", ("*", tmp_idx, tmp_idx, two_const_vec)))
                 body.append(("valu", ("+", tmp_idx, tmp_idx, tmp3)))
-                body.append(("debug", ("vcompare", tmp_idx, (round, i, "next_idx"))))
+                body.append(("debug", ("vcompare", tmp_idx, [(round, i+j, "next_idx") for j in range(VLEN)])))
                 # Compute idx = 0 if idx >= n_nodes else idx
                 body.append(("valu", ("<", tmp1, tmp_idx, n_nodes_vec)))
                 body.append(("flow", ("vselect", tmp_idx, tmp1, tmp_idx, zero_const_vec)))
-                body.append(("debug", ("vcompare", tmp_idx, (round, i, "wrapped_idx"))))
+                body.append(("debug", ("vcompare", tmp_idx, [(round, i+j, "wrapped_idx") for j in range(VLEN)])))
                 # Compute mem[inp_indices_p + i] = idx
                 # TODO: Keep this address since we already compute it at the beginning
                 body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
