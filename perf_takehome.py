@@ -82,13 +82,26 @@ class KernelBuilder:
 
     def init_hash_constants(self) -> tuple[list, list]:
         """Pre-load hash constants into scratch addresses for use in build_hash."""
-        hash_val1_addrs = []
-        hash_val3_addrs = []
-        for _, val1, _, _, val3 in HASH_STAGES:
-            val1_addr = self.scratch_const(val1)
-            val3_addr = self.scratch_const(val3)
-            hash_val1_addrs.append(val1_addr)
-            hash_val3_addrs.append(val3_addr)
+        # TODO: Clean this messy code
+        hash_val1_addrs, hash_val3_addrs = zip(*[(self.alloc_scratch(name=f"v1_{hi}"), self.alloc_scratch(name=f"v3_{hi}")) for hi in range(len(HASH_STAGES))])
+        self.instrs.append({"load": [
+            ("const", hash_val1_addrs[hi], v1) for hi, (_, v1, _, _, _) in enumerate(HASH_STAGES[:2])
+        ]})
+        self.instrs.append({"load": [
+            ("const", hash_val1_addrs[hi], v1) for hi, (_, v1, _, _, _) in enumerate(HASH_STAGES[2:4], 2)
+        ]})
+        self.instrs.append({"load": [
+            ("const", hash_val1_addrs[hi], v1) for hi, (_, v1, _, _, _) in enumerate(HASH_STAGES[4:], 4)
+        ]})
+        self.instrs.append({"load": [
+            ("const", hash_val3_addrs[hi], v3) for hi, (_, _, _, _, v3) in enumerate(HASH_STAGES[:2])
+        ]})
+        self.instrs.append({"load": [
+            ("const", hash_val3_addrs[hi], v3) for hi, (_, _, _, _, v3) in enumerate(HASH_STAGES[2:4], 2)
+        ]})
+        self.instrs.append({"load": [
+            ("const", hash_val3_addrs[hi], v3) for hi, (_, _, _, _, v3) in enumerate(HASH_STAGES[4:], 4)
+        ]})
         return hash_val1_addrs, hash_val3_addrs
 
     def build_hash(self, val_hash_addr, hash_val1_vecs, hash_val3_vecs, tmp1, tmp2, round, i):
