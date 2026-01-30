@@ -184,7 +184,6 @@ class KernelBuilder:
         tmp_idx = self.alloc_scratch("tmp_idx", length=VLEN)
         tmp_val = self.alloc_scratch("tmp_val", length=VLEN)
         tmp_node_val = self.alloc_scratch("tmp_node_val", length=VLEN)
-        tmp_addr = self.alloc_scratch("tmp_addr", length=1)
         tmp_addr_vec = self.alloc_scratch("tmp_addr_vec", length=VLEN)
 
         tmp_inp_indices_addr = self.alloc_scratch("tmp_inp_indices_addr", length=1)
@@ -228,14 +227,11 @@ class KernelBuilder:
                 body.append(("valu", ("<", tmp1, tmp_idx, n_nodes_vec)))
                 body.append(("flow", ("vselect", tmp_idx, tmp1, tmp_idx, zero_const_vec)))
                 body.append(("debug", ("vcompare", tmp_idx, [(round, i+j, "wrapped_idx") for j in range(VLEN)])))
-                # Compute mem[inp_indices_p + i] = idx
-                # TODO: Keep this address since we already compute it at the beginning
-                body.append(("alu", ("+", tmp_addr, self.scratch["inp_indices_p"], i_const)))
-                body.append(("store", ("vstore", tmp_addr, tmp_idx)))
-                # Compute mem[inp_values_p + i] = val
-                # TODO: Keep this address since we already compute it at the beginning
-                body.append(("alu", ("+", tmp_addr, self.scratch["inp_values_p"], i_const)))
-                body.append(("store", ("vstore", tmp_addr, tmp_val)))
+                # Store mem[inp_indices_p + i] = idx and mem[inp_values_p + i] = val in parallel
+                body.append({"store": [
+                    ("vstore", tmp_inp_indices_addr, tmp_idx),
+                    ("vstore", tmp_inp_values_addr, tmp_val)
+                ]})
 
         body_instrs = self.build(body)
         self.instrs.extend(body_instrs)
