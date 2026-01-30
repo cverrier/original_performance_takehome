@@ -144,15 +144,19 @@ class KernelBuilder:
         # for i in range(VLEN):
         #     self.add("load", ("const", offset_vec + i, i))
 
-        zero_const = self.scratch_const(0)
+        self.instrs.append({"load": [
+            ("const", zero_const:=self.alloc_scratch(name="0"), 0),
+            ("const", one_const:=self.alloc_scratch(name="1"), 1),
+        ]})
+        self.add("load", ("const", two_const:=self.alloc_scratch(name="2"), 2))
         zero_const_vec = self.alloc_scratch("zero_const_vec", length=VLEN)
-        self.add("valu", ("vbroadcast", zero_const_vec, zero_const))
-        one_const = self.scratch_const(1)
         one_const_vec = self.alloc_scratch("one_const_vec", length=VLEN)
-        self.add("valu", ("vbroadcast", one_const_vec, one_const))
-        two_const = self.scratch_const(2)
         two_const_vec = self.alloc_scratch("two_const_vec", length=VLEN)
-        self.add("valu", ("vbroadcast", two_const_vec, two_const))
+        self.instrs.append({"valu": [
+            ("vbroadcast", zero_const_vec, zero_const),
+            ("vbroadcast", one_const_vec, one_const),
+            ("vbroadcast", two_const_vec, two_const)
+        ]})
 
         # Pre-load hash constants and broadcast them
         hash_val1_addrs, hash_val3_addrs = self.init_hash_constants()
