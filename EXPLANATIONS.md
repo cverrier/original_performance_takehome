@@ -409,7 +409,8 @@ From `tests/submission_tests.py`:
 ```python
 # ALU (scalar, up to 12 per cycle)
 ("op", dest, src1, src2)  # dest = src1 op src2
-# ops: +, -, *, //, ^, &, |, <<, >>, %, <, ==
+# ops: +, -, *, //, cdiv, ^, &, |, <<, >>, %, <, ==
+# cdiv = ceiling division: (a + b - 1) // b
 
 # VALU (vector, up to 6 per cycle)
 ("op", dest, src1, src2)      # dest[0:8] = src1[0:8] op src2[0:8]
@@ -417,9 +418,10 @@ From `tests/submission_tests.py`:
 ("multiply_add", d, a, b, c)  # d[i] = a[i]*b[i] + c[i]
 
 # LOAD (up to 2 per cycle)
-("load", dest, addr_reg)      # dest = mem[scratch[addr_reg]]
-("vload", dest, addr_reg)     # dest[0:8] = mem[addr:addr+8]
-("const", dest, value)        # dest = value (immediate)
+("load", dest, addr_reg)              # dest = mem[scratch[addr_reg]]
+("load_offset", dest, addr, offset)   # dest+offset = mem[scratch[addr+offset]]
+("vload", dest, addr_reg)             # dest[0:8] = mem[addr:addr+8]
+("const", dest, value)                # dest = value (immediate)
 
 # STORE (up to 2 per cycle)
 ("store", addr_reg, src)      # mem[scratch[addr_reg]] = src
@@ -427,10 +429,16 @@ From `tests/submission_tests.py`:
 
 # FLOW (up to 1 per cycle)
 ("select", d, cond, a, b)     # d = a if cond else b
+("add_imm", dest, a, imm)     # dest = a + imm (immediate add)
 ("vselect", d, cond, a, b)    # vectorized select
-("jump", addr)                # pc = addr
-("cond_jump", cond, addr)     # if cond: pc = addr
 ("halt",)                     # stop execution
+("pause",)                    # pause core (can be resumed)
+("trace_write", val)          # append scratch[val] to trace buffer
+("cond_jump", cond, addr)     # if cond != 0: pc = addr
+("cond_jump_rel", cond, off)  # if cond != 0: pc += off
+("jump", addr)                # pc = addr
+("jump_indirect", addr)       # pc = scratch[addr]
+("coreid", dest)              # dest = core.id
 ```
 
 ### Architecture Constants
